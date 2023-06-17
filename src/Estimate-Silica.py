@@ -832,7 +832,7 @@ train_test_model(
     all_data =True, #For scenarios that don't use U and Th, choose whether to test on all the data or the analysis-constrained data
     outliers_to_remove= None,  # list any outlier sample ID to remove in an array e.g. [180933,168936]
     epochs=500, #How many epochs to train for (early-stopping is applied, though)
-    n_trials=2, #Number of Optuna trials to run
+    n_trials=200, #Number of Optuna trials to run
     batchsize=32, #batchsize of 32 is the Tensorflow default
     Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
     model_filepath = os.path.join(models_folder, description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
