@@ -642,7 +642,7 @@ def optuna_logging_callback(study, trial, path):
     trial_value = trial.value
     trial_params = trial.params
     trial_state = trial.state.name
-    trial_number_epochs = len(trial.intermediate_values)
+    trial_number_epochs = trial.user_attrs['epochs']
     if trial_state == "COMPLETE":
         loss = trial.user_attrs['loss']
         val_loss = trial.user_attrs['val_loss']
@@ -762,12 +762,13 @@ def objective(trial,train_dataset,val_dataset,x_train,output_location,EPOCHS):
     trial.set_user_attr('train_r2', history.history['r_square'][-1])
     trial.set_user_attr('validation_ccc', history.history['val_concordance_cc'][-1])
     trial.set_user_attr('train_ccc', history.history['concordance_cc'][-1])
-    trial.set_user_attr('validation_pearson', history.history['pearson_cc'][-1])
-    trial.set_user_attr('train_pearson', history.history['val_pearson_cc'][-1])
-    trial.set_user_attr('validation_mape', history.history['smape_metric'][-1])
-    trial.set_user_attr('train_mape', history.history['val_smape_metric'][-1])
-    trial.set_user_attr('validation_smape', history.history['r_square'][-1])
-    trial.set_user_attr('train_smape', history.history['val_r_square'][-1])
+    trial.set_user_attr('validation_pearson', history.history['val_pearson_cc'][-1])
+    trial.set_user_attr('train_pearson', history.history['pearson_cc'][-1])
+    trial.set_user_attr('validation_mape', history.history['val_mape_metric'][-1])
+    trial.set_user_attr('train_mape', history.history['mape_metric'][-1])
+    trial.set_user_attr('validation_smape', history.history['val_smape_metric'][-1])
+    trial.set_user_attr('train_smape', history.history['smape_metric'][-1])
+    trial.set_user_attr('epochs', len(history.epoch))
 
     return val_metric
 
@@ -819,7 +820,7 @@ models_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__
 #Optuna will save the model it creates for each trial. You will look at the Optuna outputs to decide which trial was the best performer, and use that model
 #The model name will be something along the lines of: Description/last_epoch_model_trialxxxx
 # For example as shown below: Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_15062023155745\last_epoch_model_trial1
-description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_15062023155745\last_epoch_model_trial1'
+description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\last_epoch_model_trial0'
 
 #Optimise the models, or run 5-fold cross-validation, or test an optimimal model
 train_test_model(
@@ -834,7 +835,7 @@ train_test_model(
     epochs=500, #How many epochs to train for (early-stopping is applied, though)
     n_trials=200, #Number of Optuna trials to run
     batchsize=32, #batchsize of 32 is the Tensorflow default
-    Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
+    Test = 'Optuna',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
     model_filepath = os.path.join(models_folder, description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
     )
 
