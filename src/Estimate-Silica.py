@@ -820,7 +820,7 @@ models_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__
 #Optuna will save the model it creates for each trial. You will look at the Optuna outputs to decide which trial was the best performer, and use that model
 #The model name will be something along the lines of: Description/last_epoch_model_trialxxxx
 # For example as shown below: Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_15062023155745\last_epoch_model_trial1
-description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\last_epoch_model_trial0'
+model_description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\last_epoch_model_trial0'
 
 #Optimise the models, or run 5-fold cross-validation, or test an optimimal model
 train_test_model(
@@ -833,24 +833,25 @@ train_test_model(
     all_data =True, #For scenarios that don't use U and Th, choose whether to test on all the data or the analysis-constrained data
     outliers_to_remove= None,  # list any outlier sample ID to remove in an array e.g. [180933,168936]
     epochs=500, #How many epochs to train for (early-stopping is applied, though)
-    n_trials=200, #Number of Optuna trials to run
+    n_trials=2, #Number of Optuna trials to run
     batchsize=32, #batchsize of 32 is the Tensorflow default
-    Test = 'Optuna',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
-    model_filepath = os.path.join(models_folder, description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
+    Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
+    model_filepath = os.path.join(models_folder, model_description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
     )
 
 #Apply an existing model to a new data set
 apply_model(
     use_UTH = True, #if you're not using UTH, then this is false (e.g. scenario 2 versus scenario 4). Use the  input data for the specified model was trained.
     use_CL = True, # if you're not using CL, then this is false. (e.g. scenario 1). Use the  input data for the specified model was trained.
-    model_path = os.path.join(models_folder, description), # path to the model you are applying on new data
+    model_path = os.path.join(models_folder, model_description), # path to the model you are applying on new data
     #you will need to pass your new data through the same PCA that the training data went through.
     #This links to the original data on which the PCA was modelled, allowing you to recreate the PCA and apply it to new data
-    dataset_for_pca_loadings =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs', 'scenario2_outputs','PCAInputs.csv'),
+    dataset_for_pca_loadings =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs', 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738','PCAInputs.csv'),
     data_columns = ['GSWA_sample_id','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'], #columns in the PCAInputs data, that you will need
     data_to_predict_on = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'data_files','case_study.csv'), #the data file to run the silica predictions on,
     prediction_columns = ['source', 'GSWA_sample_id','analytical_spot','groupno','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'],
     output_location =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs'),
-    description = description)
+    description = ('_').join(model_description.split('\\')[0].split('_')[2:]) #This is very specific to the local file/folder naming!
+    )
 
 
