@@ -22,22 +22,28 @@ import tensorflow_addons as tfa
 from tensorflow.keras.layers.experimental import preprocessing
 import tensorflow.keras.backend as K
 
-def pca(df, features,ML_features=None, keep_columns = None, pca = None):
+def pca(df, features, ML_features=None, keep_columns = None, pca_model = None, scaling_data = None):
     #it's at this point that sampleid, bin, and CL textures are removed. Only shape and possibly U&Th (depending on the ML_features variable passed) form part of x, created below
     df.reset_index(drop=True, inplace=True)
     x = df.loc[:, features].values
 
-    scaler = StandardScaler()
-    x_scaled = scaler.fit_transform(x)
-    if pca == None:
-        pca = PCA(n_components=3)
-        pca.fit(x_scaled)
-        pca_features = pca.transform(x_scaled)
+    if scaling_data is not None:
+        scaling_data.reset_index(drop=True, inplace=True)
+        y = scaling_data.loc[:, features].values
+        y_means = y.mean(axis=0)
+        y_stds = y.std(axis=0)
+        x_scaled = (x-y_means)/y_stds
     else:
-        pca.fit(x_scaled)
-        pca_features = pca.transform(x_scaled)
+        scaler = StandardScaler()
+        x_scaled = scaler.fit_transform(x)
+    if pca_model == None:
+        pca_model = PCA(n_components=3)
+        pca_model.fit(x_scaled)
+        pca_features = pca_model.transform(x_scaled)
+    else:
+        pca_features = pca_model.transform(x_scaled)
 
-    print(f'pca variance:{pca.explained_variance_ratio_}')
+    print(f'pca variance:{pca_model.explained_variance_ratio_}')
 
     if ML_features is not None:
         x_ml_features = df.loc[:, ML_features].values
@@ -45,6 +51,7 @@ def pca(df, features,ML_features=None, keep_columns = None, pca = None):
         x2.columns = ['PC1', 'PC2', 'PC3', 'oscillatory_zonation', 'sector_zonation', 'homogenous_zonation']
     else:
         x2 = pd.DataFrame(pca_features[:,0:3])
+        x2.columns = ['PC1', 'PC2', 'PC3']
 
     if keep_columns is not None:
         keep = df.loc[:, keep_columns]
@@ -52,7 +59,7 @@ def pca(df, features,ML_features=None, keep_columns = None, pca = None):
     else:
         x3 = x2
 
-    return x3,pca
+    return x3, pca_model
 
 def build_classifier(train_features, n_layers, n_units,dropout):
     CLASSES =1
@@ -537,7 +544,7 @@ def setup_seed(seed):
     tf.random.set_seed(seed) #Set the `tensorflow` pseudo-random generator at a fixed value. This is CPU fix.
     os.environ['TF_DETERMINISTIC_OPS'] = '1' #tensorflow gpu fix. Must have pip install tensorflow-determinism
 
-def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,data_to_predict_on,prediction_columns,output_location,description):
+def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,data_to_predict_on,prediction_columns,output_location,description,keep_columns=None):
     #This function is written specifically for applying manuscript models to the manuscript case study
     #It makes assumptions about field names
 
@@ -554,7 +561,7 @@ def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,
 
     #1- load the original train_test data that pca was performed on, to generate the pca_loadings
     df_for_pca = pd.read_csv(dataset_for_pca_loadings, usecols = data_columns)
-    _, pca_loadings = pca(df_for_pca, pca_features, ML_features, keep_columns=None, pca=None)
+    _, pca_loadings = pca(df_for_pca, pca_features, ML_features, keep_columns=None, pca_model=None)
 
     #2 load the data set to predict on:
     df_data_all = pd.read_csv(data_to_predict_on, usecols = prediction_columns)
@@ -563,15 +570,18 @@ def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,
         df_data.reset_index(drop=True, inplace=True)
     else:
         df_data = df_data_all
-    keep_columns = ['SiO2_pct', 'bin', 'groupno', 'analytical_spot', 'GSWA_sample_id', 'source']
-    df_data_pca,_ = pca(df_data, pca_features, ML_features, keep_columns=keep_columns, pca=pca_loadings)
 
+    # The new data must be scale by the model's training dataset. Hence scaling_data is used in this funcition
+    df_data_pca,_ = pca(df_data, pca_features, ML_features, keep_columns=keep_columns, pca_model=pca_loadings, scaling_data=df_for_pca)
     #3 - create x data sets for prediction
-    x = df_data_pca.loc[:,['PC1', 'PC2', 'PC3', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation']]
+    if use_CL:
+        x = df_data_pca.loc[:,['PC1', 'PC2', 'PC3', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation']]
+    else:
+        x = df_data_pca.loc[:, ['PC1', 'PC2', 'PC3']]
 
     #4 - apply model to data
     prediction_results = predict(model_path, x)
-    spot_info = df_data_pca.loc[:,['source','GSWA_sample_id','analytical_spot','SiO2_pct', 'bin', 'groupno']]
+    spot_info = df_data_pca.loc[:,keep_columns]
     results = pd.concat([spot_info,prediction_results],axis=1)
 
     #5 - save results
@@ -823,7 +833,7 @@ models_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__
 model_description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\last_epoch_model_trial0'
 
 #Optimise the models, or run 5-fold cross-validation, or test an optimimal model
-train_test_model(
+'''train_test_model(
     input_data_filepath=os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Data_files','Data Set S1.csv'),  # update the file path to the input data file
     aggregate_size=2, #number of zircon to aggregate to create an additional data point
     resampling_repeats=2, #factor by which the largest silica bin is increased
@@ -837,13 +847,13 @@ train_test_model(
     batchsize=32, #batchsize of 32 is the Tensorflow default
     Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
     model_filepath = os.path.join(models_folder, model_description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
-    )
+    )'''
 
 #Apply an existing model to a new data set
 apply_model(
-    use_UTH = True, #if you're not using UTH, then this is false (e.g. scenario 2 versus scenario 4). Use the  input data for the specified model was trained.
-    use_CL = True, # if you're not using CL, then this is false. (e.g. scenario 1). Use the  input data for the specified model was trained.
-    model_path = os.path.join(models_folder, model_description), # path to the model you are applying on new data
+    use_UTH = True, #if you're not using UTH, then this is false (e.g. scenario 2 versus scenario 4). Use the  input data for the specified model.
+    use_CL = True, # if you're not using CL, then this is false. (e.g. scenario 1). Use the  input data for the specified model.
+    model_path =os.path.join(models_folder, model_description), # path to the model you are applying on new data
     #you will need to pass your new data through the same PCA that the training data went through.
     #This links to the original data on which the PCA was modelled, allowing you to recreate the PCA and apply it to new data
     dataset_for_pca_loadings =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs', 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738','PCAInputs.csv'),
@@ -851,7 +861,8 @@ apply_model(
     data_to_predict_on = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'data_files','case_study.csv'), #the data file to run the silica predictions on,
     prediction_columns = ['source', 'GSWA_sample_id','analytical_spot','groupno','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'],
     output_location =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs'),
-    description = ('_').join(model_description.split('\\')[0].split('_')[2:]) #This is very specific to the local file/folder naming!
+    description = ('_').join(model_description.split('\\')[0].split('_')[2:]), #This is very specific to the local file/folder naming!
+    keep_columns =['SiO2_pct', 'bin', 'groupno', 'analytical_spot', 'GSWA_sample_id', 'source'] #columns in the dataset, which aren't used for estimation, but which are nice to output in the results file.
     )
 
 
