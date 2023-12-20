@@ -834,7 +834,7 @@ model_description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\l
 
 #Optimise the models, or run 5-fold cross-validation, or test an optimimal model
 '''train_test_model(
-    input_data_filepath=os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Data_files','Data Set S1.csv'),  # update the file path to the input data file
+    input_data_filepath=os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Data_files','Dataset.csv'),  # update the file path to the input data file
     aggregate_size=2, #number of zircon to aggregate to create an additional data point
     resampling_repeats=2, #factor by which the largest silica bin is increased
     test_split_size=0.1,  #percentage of data set to keep aside as a test subset
