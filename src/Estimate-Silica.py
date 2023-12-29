@@ -845,7 +845,7 @@ model_description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\l
     epochs=500, #How many epochs to train for (early-stopping is applied, though)
     n_trials=2, #Number of Optuna trials to run
     batchsize=32, #batchsize of 32 is the Tensorflow default
-    Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
+    Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exits once data sets are created.
     model_filepath = os.path.join(models_folder, model_description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
     )'''
 
@@ -859,6 +859,7 @@ apply_model(
     dataset_for_pca_loadings =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs', 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738','PCAInputs.csv'),
     data_columns = ['GSWA_sample_id','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'], #columns in the PCAInputs data, that you will need
     data_to_predict_on = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'data_files','case_study.csv'), #the data file to run the silica predictions on,
+    #the columns in prediction_columns are currently set up to run on the case study dataset.
     prediction_columns = ['source', 'GSWA_sample_id','analytical_spot','groupno','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'],
     output_location =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs'),
     description = ('_').join(model_description.split('\\')[0].split('_')[2:]), #This is very specific to the local file/folder naming!
