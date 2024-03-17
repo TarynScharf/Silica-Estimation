@@ -22,39 +22,22 @@ import tensorflow_addons as tfa
 from tensorflow.keras.layers.experimental import preprocessing
 import tensorflow.keras.backend as K
 
-def pca(df, features, ML_features=None, keep_columns = None, pca_model = None, scaling_data = None, output_location = None):
+def pca(df, features,ML_features=None, keep_columns = None, pca = None):
     #it's at this point that sampleid, bin, and CL textures are removed. Only shape and possibly U&Th (depending on the ML_features variable passed) form part of x, created below
     df.reset_index(drop=True, inplace=True)
     x = df.loc[:, features].values
-    #TODO DELETE NEXT LINE
-    np.savetxt('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/B_x_data.csv',x, delimiter=',')
 
-    if scaling_data is not None:
-        scaling_data.reset_index(drop=True, inplace=True)
-        y = scaling_data.loc[:, features].values
-        y_means = y.mean(axis=0)
-        y_stds = y.std(axis=0)
-        x_scaled = (x-y_means)/y_stds
+    scaler = StandardScaler()
+    x_scaled = scaler.fit_transform(x)
+    if pca == None:
+        pca = PCA(n_components=3)
+        pca.fit(x_scaled)
+        pca_features = pca.transform(x_scaled)
     else:
-        scaler = StandardScaler()
-        x_scaled = scaler.fit_transform(x)
-    #TODO  DELETE THIS NEXT LINE
-    np.savetxt('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/B_x_scaled.csv', x_scaled,delimiter="," )
-    if pca_model == None:
-        pca_model = PCA(n_components=3)
-        pca_model.fit(x_scaled)
-        pca_features = pca_model.transform(x_scaled)
-    else:
-        pca_features = pca_model.transform(x_scaled)
+        pca.fit(x_scaled)
+        pca_features = pca.transform(x_scaled)
 
-    #write out the variance per principal component
-    print(f'pca variance:{pca_model.explained_variance_ratio_}')
-    #save the principal component loadings
-    df_pca_loadings = pd.DataFrame(pca_model.components_, columns=features)
-    df_pca_loadings.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/A_pca_loadings.csv')
-    df_pca_loadings.index = ['PC1', 'PC2', 'PC3']
-    #TODO  delete next line
-    df_pca_loadings.to_csv(os.path.join(output_location,'B_pca_loadings.csv'))
+    print(f'pca variance:{pca.explained_variance_ratio_}')
 
     if ML_features is not None:
         x_ml_features = df.loc[:, ML_features].values
@@ -62,7 +45,6 @@ def pca(df, features, ML_features=None, keep_columns = None, pca_model = None, s
         x2.columns = ['PC1', 'PC2', 'PC3', 'oscillatory_zonation', 'sector_zonation', 'homogenous_zonation']
     else:
         x2 = pd.DataFrame(pca_features[:,0:3])
-        x2.columns = ['PC1', 'PC2', 'PC3']
 
     if keep_columns is not None:
         keep = df.loc[:, keep_columns]
@@ -70,7 +52,7 @@ def pca(df, features, ML_features=None, keep_columns = None, pca_model = None, s
     else:
         x3 = x2
 
-    return x3, pca_model
+    return x3,pca
 
 def build_classifier(train_features, n_layers, n_units,dropout):
     CLASSES =1
@@ -115,7 +97,7 @@ def evaluate_model(x_test, y_test, model):
 
     return results,metrics_df
 
-def evaluate_model_with_shap(x_test, y_test, model,xtrain,CL, shap_output_location):
+def evaluate_model_with_shap(x_test, y_test, model,xtrain, shap_output_location):
     y_pred = model.predict(x_test)
     y_test.reset_index(inplace=True, drop=True)
     results = pd.concat([y_test, pd.DataFrame(y_pred)], axis=1)
@@ -137,23 +119,15 @@ def evaluate_model_with_shap(x_test, y_test, model,xtrain,CL, shap_output_locati
     shap.summary_plot(shap_values, feature_names=['PC1','PC2','PC3','oscillatory_zonation', 'sector_zonation', 'homogenous_zonation'])
     shap.plots.beeswarm(shap_values, max_display=15)
 
-    if CL:
-        shap_values_df = pd.DataFrame(shap_values.values, columns=['shapPC1','shapPC2','shapPC3','shaposcillatory_zonation', 'shapsector_zonation', 'shaphomogenous_zonation'])
-        data_values_df = pd.DataFrame(shap_values.data, columns = ['PC1','PC2','PC3','oscillatory_zonation', 'sector_zonation', 'homogenous_zonation'])
-        pc1_df = pd.concat([data_values_df, shap_values_df], axis=1)
-        sns.scatterplot(data=pc1_df, x='oscillatory_zonation', y='shaposcillatory_zonation',label = 'OZ')
-        sns.scatterplot(data=pc1_df, x='sector_zonation', y='shapsector_zonation', label = 'SZ')
-        sns.scatterplot(data=pc1_df, x='homogenous_zonation', y='shaphomogenous_zonation', label = 'HZ')
-        sns.scatterplot(data=pc1_df, x='PC1', y='shapPC1', label='PC1')
-        sns.scatterplot(data=pc1_df, x='PC2', y='shapPC2', label='PC2')
-        sns.scatterplot(data=pc1_df, x='PC3', y='shapPC3', label='PC3')
-    else:
-        shap_values_df = pd.DataFrame(shap_values.values, columns=['shapPC1', 'shapPC2', 'shapPC3'])
-        data_values_df = pd.DataFrame(shap_values.data, columns=['PC1', 'PC2', 'PC3'])
-        pc1_df = pd.concat([data_values_df, shap_values_df], axis=1)
-        sns.scatterplot(data = pc1_df, x='PC1', y='shapPC1', label = 'PC1')
-        sns.scatterplot(data = pc1_df, x='PC2', y='shapPC2', label = 'PC2')
-        sns.scatterplot(data = pc1_df, x='PC3', y='shapPC3',label = 'PC3')
+    shap_values_df = pd.DataFrame(shap_values.values, columns=['shapPC1','shapPC2','shapPC3','shaposcillatory_zonation', 'shapsector_zonation', 'shaphomogenous_zonation'])
+    data_values_df = pd.DataFrame(shap_values.data, columns = ['PC1','PC2','PC3','oscillatory_zonation', 'sector_zonation', 'homogenous_zonation'])
+    pc1_df = pd.concat([data_values_df,shap_values_df],axis=1 )
+    sns.scatterplot(data = pc1_df, x='PC1', y='shapPC1' )
+    sns.scatterplot(data = pc1_df, x='PC2', y='shapPC2' )
+    sns.scatterplot(data = pc1_df, x='PC3', y='shapPC3' )
+    sns.scatterplot(data = pc1_df, x='oscillatory_zonation', y='shaposcillatory_zonation' )
+    sns.scatterplot(data = pc1_df, x='sector_zonation', y='shapsector_zonation' )
+    sns.scatterplot(data = pc1_df, x='homogenous_zonation', y='shaphomogenous_zonation' )
 
     clustering = shap.utils.hclust(x_test, y_test)
     shap.plots.bar(shap_values, clustering=clustering, max_display=15)
@@ -357,7 +331,7 @@ def predict(model_path, x_data):
 
     return prediction_results
 
-def train_and_evaluate(train_log_filepath, train_dataset, val_dataset, xtrain, x_test_OG, y_test_OG, batch_size, epochs,CL, model_path, shap_output_location=False):
+def train_and_evaluate(train_log_filepath, train_dataset, val_dataset, xtrain, x_test_OG, y_test_OG, batch_size, epochs, model_path, shap_output_location=False):
     # instantiate the model
     if model_path is None:
         csvLogger = tf.keras.callbacks.CSVLogger(train_log_filepath)
@@ -378,7 +352,7 @@ def train_and_evaluate(train_log_filepath, train_dataset, val_dataset, xtrain, x
         model = tf.keras.models.load_model(model_path,
                                            {"concordance_cc": concordance_cc, "pearson_cc": pearson_cc, "r_squared": r_squared, "mape_metric": mape_metric, "smape_metric": smape_metric})
         model.compile(optimizer=model.optimizer, loss=model.loss, metrics=[mape_metric, smape_metric, concordance_cc, pearson_cc, tfa.metrics.RSquare(dtype=tf.float32)])
-        test_results, test_metrics = evaluate_model_with_shap(x_test_OG, y_test_OG, model,xtrain,CL,shap_output_location)
+        test_results, test_metrics = evaluate_model_with_shap(x_test_OG, y_test_OG, model,xtrain,shap_output_location)
 
     results = [test_results]
     return results,test_metrics, model
@@ -392,14 +366,14 @@ def create_results_folder(path,description):
     print(f'Created {output_location}')
     return output_location
 
-def train_test_model(scenario,input_data_filepath, aggregate_size, resampling_repeats, test_split_size, CL, UTH, all_data, outliers_to_remove, epochs, n_trials= None, batchsize= None, Test=None, model_filepath=None):
+def train_test_model(input_data_filepath, aggregate_size, resampling_repeats, test_split_size, CL, UTH, all_data, outliers_to_remove, epochs, n_trials= None, batchsize= None, Test=None, model_filepath=None):
     #trial description for reporting
     if Test == 'Optuna':
-        description = f'Optuna_{scenario}'
+        description = f'Optuna'
     elif Test == 'Kfold':
-        description = f'Kfold_{scenario}'
+        description = f'Kfold'
     elif Test == 'Test':
-        description = f'Test_{scenario}'
+        description = f'Test'
     else:
         print('Test variable can be Optuna, Kfold or Test. Incorrect Test variable assignment.')
         return
@@ -459,30 +433,23 @@ def train_test_model(scenario,input_data_filepath, aggregate_size, resampling_re
 
     #4.3 - recombine the train and test subsets for PCA
     df_train_test = pd.concat([train_balanced_classes,test_OG], ignore_index=True)
-    #TODO delete the next line
-    df_train_test.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/A_starting dataset.csv')
 
     #4.4 - PCA on train and test data
-    df_pca, pca_loadings = pca(df_train_test, pca_features, ML_features, keep_columns=['SiO2_pct', 'Dataset', 'GSWA_sample_id'], pca_model = None, scaling_data = None, output_location=location)
+    df_pca, pca_loadings = pca(df_train_test, pca_features, ML_features, keep_columns=['SiO2_pct', 'Dataset'])
 
     #4.5 - separate into train and test datasets again
     df_train_pca = df_pca[df_pca['Dataset']=='train']
-    df_train_pca = df_train_pca.sample(frac=1).reset_index(drop=True)
-    x_train_pca = df_train_pca[['PC1','PC2','PC3', 'oscillatory_zonation', 'sector_zonation', 'homogenous_zonation']] #0:-2
+    x_train_pca = df_train_pca.iloc[:, 0:-2]
     y_train_pca = df_train_pca[['SiO2_pct']]
 
     df_test_pca = df_pca[df_pca['Dataset'] == 'test']
-    #TODO delete next line
-    df_test_pca.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/A_testDatasetPCA.csv')
-    x_test_pca = df_test_pca[['PC1','PC2','PC3', 'oscillatory_zonation', 'sector_zonation', 'homogenous_zonation']]
+    x_test_pca = df_test_pca.iloc[:, 0:-2]
     y_test_pca = df_test_pca[['SiO2_pct']]
 
     #save the data sets for later review
     df.to_csv(os.path.join(location, f'OriginalDataset_OutliersRemoved_SilicaCapped.csv'))
     df_pca.to_csv(os.path.join(location,f'ModelInputs.csv'))
     df_train_test.to_csv(os.path.join(location,f'PCAInputs.csv'))
-    #TODO delete th next line
-    df_train_test.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/A_PCAInputs.csv')
 
     if Test == 'Optuna':
         # Set up and run the Optuna optimisation
@@ -498,7 +465,7 @@ def train_test_model(scenario,input_data_filepath, aggregate_size, resampling_re
     elif Test == 'Kfold':
         # If we're testing, execute the 5-fold cross-validation
         model_filepath = None
-        kfold = KFold(n_splits=10, shuffle=True, random_state=42)
+        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
         results = []
         metrics = []
         for i, (train_index, test_index) in enumerate(kfold.split(x_train_pca, y_train_pca)):
@@ -509,7 +476,7 @@ def train_test_model(scenario,input_data_filepath, aggregate_size, resampling_re
             val_dataset = tf.data.Dataset.from_tensor_slices((xval, yval))
             val_dataset = val_dataset.batch(batchsize, drop_remainder=True)
             filepath = os.path.join(os.path.join(location, f'{description}_log_fold{i}.csv'))
-            fold_results, fold_metrics, _ = train_and_evaluate(filepath, train_dataset, val_dataset, xtrain, x_test_pca, y_test_pca, batchsize, epochs,CL, model_path=None)
+            fold_results, fold_metrics, _ = train_and_evaluate(filepath, train_dataset, val_dataset, xtrain, x_test_pca, y_test_pca, batchsize, epochs, model_path=None)
             results.append(fold_results)
             metrics.append(fold_metrics)
 
@@ -535,7 +502,7 @@ def train_test_model(scenario,input_data_filepath, aggregate_size, resampling_re
 
         results = []
         metrics = []
-        fold_results, fold_metrics, _ = train_and_evaluate(None, None, None, xtrain, x_test_pca, y_test_pca, batchsize, epochs,CL, model_filepath,shap_output_location=location)
+        fold_results, fold_metrics, _ = train_and_evaluate(None, None, None, xtrain, x_test_pca, y_test_pca, batchsize, epochs, model_filepath,shap_output_location=location)
 
         results.append(fold_results)
         metrics.append(fold_metrics)
@@ -570,7 +537,7 @@ def setup_seed(seed):
     tf.random.set_seed(seed) #Set the `tensorflow` pseudo-random generator at a fixed value. This is CPU fix.
     os.environ['TF_DETERMINISTIC_OPS'] = '1' #tensorflow gpu fix. Must have pip install tensorflow-determinism
 
-def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,data_to_predict_on,prediction_columns,output_location,description,keep_columns=None):
+def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,data_to_predict_on,prediction_columns,output_location,description):
     #This function is written specifically for applying manuscript models to the manuscript case study
     #It makes assumptions about field names
 
@@ -587,32 +554,24 @@ def apply_model(use_UTH,use_CL,model_path,dataset_for_pca_loadings,data_columns,
 
     #1- load the original train_test data that pca was performed on, to generate the pca_loadings
     df_for_pca = pd.read_csv(dataset_for_pca_loadings, usecols = data_columns)
-    #TODO delete next line
-    df_for_pca.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/B_data_for_pca.csv')
-    _, pca_loadings = pca(df_for_pca, pca_features, ML_features, keep_columns=None, pca_model=None,output_location=output_location)
+    _, pca_loadings = pca(df_for_pca, pca_features, ML_features, keep_columns=None, pca=None)
 
     #2 load the data set to predict on:
     df_data_all = pd.read_csv(data_to_predict_on, usecols = prediction_columns)
-    #TODO delete next line
-    df_data_all.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/apply_model_data_to_predict_on.csv')
     if use_UTH:
         df_data = df_data_all.dropna(how='any')
         df_data.reset_index(drop=True, inplace=True)
     else:
         df_data = df_data_all
+    keep_columns = ['SiO2_pct', 'bin', 'groupno', 'analytical_spot', 'GSWA_sample_id', 'source']
+    df_data_pca,_ = pca(df_data, pca_features, ML_features, keep_columns=keep_columns, pca=pca_loadings)
 
-    # The new data must be scale by the model's training dataset. Hence scaling_data is used in this funcition
-    df_data_pca,_ = pca(df_data, pca_features, ML_features, keep_columns=keep_columns, pca_model=pca_loadings, scaling_data=df_for_pca,output_location=output_location)
-    df_data_pca.to_csv('C:/Users/20023951/PycharmProjects/Silica-Estimation/Outputs/apply_model_pca.csv')
     #3 - create x data sets for prediction
-    if use_CL:
-        x = df_data_pca.loc[:,['PC1', 'PC2', 'PC3', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation']]
-    else:
-        x = df_data_pca.loc[:, ['PC1', 'PC2', 'PC3']]
+    x = df_data_pca.loc[:,['PC1', 'PC2', 'PC3', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation']]
 
     #4 - apply model to data
     prediction_results = predict(model_path, x)
-    spot_info = df_data_pca.loc[:,keep_columns]
+    spot_info = df_data_pca.loc[:,['source','GSWA_sample_id','analytical_spot','SiO2_pct', 'bin', 'groupno']]
     results = pd.concat([spot_info,prediction_results],axis=1)
 
     #5 - save results
@@ -645,7 +604,6 @@ def concordance_cc(x, y):
 def pearson_cc(x,y):
     #https://stackoverflow.com/questions/72710792/creating-pearson-correlation-metrics-using-tensorflow-tensor
     # https://github.com/WenYanger/Keras_Metrics
-
     mean_x = K.mean(x, axis = 0)
     mean_y = K.mean(y, axis = 0)
     xm, ym = x - mean_x, y - mean_y
@@ -655,14 +613,6 @@ def pearson_cc(x,y):
     r_den = K.sqrt(x_square_sum * y_square_sum)
     r = r_num /(r_den)
     pearson_tensor = K.mean(r)
-
-    #todo delete these lines
-    '''tf.print('x',x)
-    tf.print('mean_x',mean_x)
-    tf.print('xm', xm)
-    tf.print('x_squared_sum',x_square_sum)
-    tf.print('r_den',r_den)
-    tf.print('pearson tensor',pearson_tensor)'''
     return pearson_tensor
 
 def r_squared(x,y):
@@ -863,93 +813,45 @@ setup_seed(42)
 
 #Specify which model to apply to a test data set or to new data.
 #This is the name of the folder in which all models are located once they created. Model are created by running the train_test_model function using the parameter Test = 'Optuna'
-models_folder ='C:/Users/20023951/PycharmProjects/ClassifyRockTypes/PCA/OptunaOptimisations/' #os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs')
+models_folder = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs')
 
 #This is the name of the folder that holds the model itself, which will be in the output folder defined above
 #Currently, there is an example of an Optuna run that comprises 2 trials, in the Ouputs folder
 #Optuna will save the model it creates for each trial. You will look at the Optuna outputs to decide which trial was the best performer, and use that model
 #The model name will be something along the lines of: Description/last_epoch_model_trialxxxx
 # For example as shown below: Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_15062023155745\last_epoch_model_trial1
-#model_description = 'scenario5_2AGGx2Resample_L3_N40_SHAPE_CL_180933_168936_17052023130813/last_epoch_model_trial47' #'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\last_epoch_model_trial0'
-#scenario 3: 'scenario3_2AGGx2Resample_L3_N40_SHAPE_UTH_silica_below_69_180933_168936_15052023090217/last_epoch_model_trial31'
-#scenario 4: 'scenario4_2AGGx2Resample_L3_N40_SHAPE_CL_silica_below_69_180933_168936_15052023133725/last_epoch_model_trial153'
-#scenario 5: 'scenario5_2AGGx2Resample_L3_N40_SHAPE_CL_180933_168936_17052023130813/last_epoch_model_trial47'
-#scenario 6: 'scenario6_2AGGx2Resample_L3_N40_SHAPE_180933_168936_16052023123425/last_epoch_model_trial113'
-#scenario 7:
+model_description = 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738\last_epoch_model_trial0'
 
 #Optimise the models, or run 5-fold cross-validation, or test an optimimal model
-scenario = 'scenario_2'
-if scenario == 'scenario_2':
-    model_description = 'scenario2_2AGGx2Resample_L3_N40_SHAPE_UTH_CL_silica_below_69_180933_168936_14052023233844/last_epoch_model_trial57'
-    use_CL=True
-    use_UTH = True
-    use_all_data=False
-elif scenario == 'scenario_3':
-    model_description = 'scenario3_2AGGx2Resample_L3_N40_SHAPE_UTH_silica_below_69_180933_168936_15052023090217/last_epoch_model_trial31'
-    use_CL = False
-    use_UTH = True
-    use_all_data = False
-elif scenario == 'scenario_4':
-    model_description = 'scenario4_2AGGx2Resample_L3_N40_SHAPE_CL_silica_below_69_180933_168936_15052023133725/last_epoch_model_trial153'
-    use_CL = True
-    use_UTH = False
-    use_all_data = False
-elif scenario == 'scenario_5':
-    model_description = 'scenario5_2AGGx2Resample_L3_N40_SHAPE_CL_180933_168936_17052023130813/last_epoch_model_trial47'
-    use_CL = True
-    use_UTH = False
-    use_all_data = True
-elif scenario == 'scenario_6':
-    model_description = 'scenario6_2AGGx2Resample_L3_N40_SHAPE_180933_168936_16052023123425/last_epoch_model_trial113'
-    use_CL = False
-    use_UTH = False
-    use_all_data = False
-elif scenario == 'scenario_7':
-    model_description = ''
-    use_CL = False
-    use_UTH = False
-    use_all_data = True
-'''
 train_test_model(
-    scenario = scenario,
-    input_data_filepath=os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Data_files','Dataset.csv'),  # update the file path to the input data file
+    input_data_filepath=os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Data_files','Data Set S1.csv'),  # update the file path to the input data file
     aggregate_size=2, #number of zircon to aggregate to create an additional data point
     resampling_repeats=2, #factor by which the largest silica bin is increased
     test_split_size=0.1,  #percentage of data set to keep aside as a test subset
-    CL=use_CL, # whether or not to use cathodoluminescence texture
-    UTH=use_UTH, # whether or not to use U and Th data per grain
-    all_data=use_all_data, #For scenarios that don't use U and Th, choose whether to test on all the data or the analysis-constrained data
+    CL=True, # whether or not to use cathodoluminescence texture
+    UTH=True, # whether or not to use U and Th data per grain
+    all_data =True, #For scenarios that don't use U and Th, choose whether to test on all the data or the analysis-constrained data
     outliers_to_remove= None,  # list any outlier sample ID to remove in an array e.g. [180933,168936]
     epochs=500, #How many epochs to train for (early-stopping is applied, though)
-    n_trials=200, #Number of Optuna trials to run
+    n_trials=2, #Number of Optuna trials to run
     batchsize=32, #batchsize of 32 is the Tensorflow default
-    Test = 'Kfold',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exits once data sets are created.
-    model_filepath = None#os.path.join(models_folder, model_description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
+    Test = 'Test',#Indicates wich action to take. Options: 'Optuna', 'Kfold', 'Test'. If not specified, the function exists once data sets are created.
+    model_filepath = os.path.join(models_folder, model_description) # path to the model you are applying on the test data. If not None, specify the model here using this:  os.path.join(models_folder, description)
     )
 
 #Apply an existing model to a new data set
-'''
 apply_model(
-    use_UTH = True, #if you're not using UTH, then this is false (e.g. scenario 2 versus scenario 4). Use the  input data for the specified model.
-    use_CL = True,#True, # if you're not using CL, then this is false. (e.g. scenario 1). Use the  input data for the specified model.
-    model_path =os.path.join(models_folder, model_description), # path to the model you are applying on new data
+    use_UTH = True, #if you're not using UTH, then this is false (e.g. scenario 2 versus scenario 4). Use the  input data for the specified model was trained.
+    use_CL = True, # if you're not using CL, then this is false. (e.g. scenario 1). Use the  input data for the specified model was trained.
+    model_path = os.path.join(models_folder, model_description), # path to the model you are applying on new data
     #you will need to pass your new data through the same PCA that the training data went through.
     #This links to the original data on which the PCA was modelled, allowing you to recreate the PCA and apply it to new data
-    dataset_for_pca_loadings ='C:/Users/20023951/PycharmProjects/ClassifyRockTypes/PCA/OptunaOptimisations/scenario2_optuna model_2AGGx2Resample_L3_N40_SHAPE_UTH_CL_180933_168936_16052023171626/PCAInputs.csv',#os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs', 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738','PCAInputs.csv''Outputs', 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738','PCAInputs.csv'
-    data_columns = ['GSWA_sample_id','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation'], #columns in the PCAInputs data, that you will need
-    #data_to_predict_on = 'C:/Users/20023951/Documents/PhD/Reporting/Project 3_FFN/CaseStudy_Xenocrysts/Masks/xenocryst_measurements.csv', #os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'data_files','Dataset.csv'), #the data file to run the silica predictions on,
-    data_to_predict_on ='C:/Users/20023951/Documents/PhD/Reporting/Project 3_FFN/GreenlandCaseStudy/greenland_samples_group_I.csv', #os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'data_files','case_study.csv'), #the data file to run the silica predictions on,
-    #the columns in prediction_columns are currently set up to run on the case study dataset.
-    #prediction_columns = ['sample_id','SiO2_pct','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation'],
-    #prediction_columns = ['GSWA_sample_id','analytical_spot','group','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation'],
-    prediction_columns = ['sample_id','analytical_spot','group','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm', 'oscillatory_zonation', 'sector_zonation','homogenous_zonation'],
-    #prediction_columns = ['sample_id','analytical_spot','group','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'],
+    dataset_for_pca_loadings =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs', 'Results_Optuna_2AGGx2Resample_SHAPE_UTH_CL_20062023130738','PCAInputs.csv'),
+    data_columns = ['GSWA_sample_id','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'], #columns in the PCAInputs data, that you will need
+    data_to_predict_on = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'data_files','case_study.csv'), #the data file to run the silica predictions on,
+    prediction_columns = ['source', 'GSWA_sample_id','analytical_spot','groupno','area','equivalent_diameter','perimeter','minor_axis_length','major_axis_length','solidity','convex_area','form_factor','roundness','compactness','aspect_ratio','minimum_Feret','maximum_Feret','U238_ppm','Th232_ppm','SiO2_pct','oscillatory_zonation', 'sector_zonation','homogenous_zonation','bin'],
     output_location =os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs'),
-    #output_location ='C:/Users/20023951/Documents/PhD/Reporting/Project 3_FFN/GreenlandCaseStudy',#os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))),'Outputs'),
-    description = scenario,#('_').join(model_description.split('\\')[0].split('_')[2:]), #This is very specific to the local file/folder naming!
-    #keep_columns =['GSWA_sample_id', 'SiO2_pct']#['analytical_spot', 'GSWA_sample_id'] #columns in the dataset, which aren't used for estimation, but which are nice to output in the results file.
-    keep_columns =['analytical_spot', 'sample_id', 'group'] #columns in the dataset, which aren't used for estimation, but which are nice to output in the results file.
-    #keep_columns =['SiO2_pct', 'bin', 'groupno', 'analytical_spot', 'GSWA_sample_id', 'source'] #columns in the dataset, which aren't used for estimation, but which are nice to output in the results file.
+    description = ('_').join(model_description.split('\\')[0].split('_')[2:]) #This is very specific to the local file/folder naming!
     )
 
 
